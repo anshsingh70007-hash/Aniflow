@@ -231,7 +231,7 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
 
     override suspend fun checkUpdates(): AppUpdateInfo? {
         return try {
-            client.get(com.example.aniflow.utils.UpdateConfig.UPDATE_JSON_URL + "?t=${System.currentTimeMillis()}").body()
+            client.get(com.example.aniflow.utils.UpdateConfig.UPDATE_JSON_URL + "?t=${System.currentTimeMillis()}").body<com.example.aniflow.data.model.AppUpdateInfo>()
         } catch (e: Exception) {
             android.util.Log.e("DefaultAnimeRepository", "Failed to check update", e)
             null
