@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import io.ktor.client.request.get
 import io.ktor.client.call.body
+import io.ktor.client.statement.bodyAsText
 
 class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
     private val client = NetworkModule.client
@@ -229,9 +230,20 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
         )
     }
 
-    override suspend fun checkUpdates(): AppUpdateInfo? {
-        return try {
-            client.get(com.example.aniflow.utils.UpdateConfig.UPDATE_JSON_URL + "?t=${System.currentTimeMillis()}").body<com.example.aniflow.data.model.AppUpdateInfo>()
+    override suspend fun checkUpdates(): AppUpdateInfo? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val response = client.get(com.example.aniflow.utils.UpdateConfig.UPDATE_JSON_URL + "?t=${System.currentTimeMillis()}")
+            val jsonText = response.bodyAsText()
+            android.util.Log.d("DefaultAnimeRepository", "checkUpdates raw JSON: $jsonText")
+            val json = org.json.JSONObject(jsonText)
+            AppUpdateInfo(
+                versionCode = json.getInt("versionCode"),
+                versionName = json.getString("versionName"),
+                updateUrl = json.getString("updateUrl"),
+                updateNotes = if (json.isNull("updateNotes")) null else json.getString("updateNotes"),
+                forceUpdate = json.optBoolean("forceUpdate", false),
+                silentUpdate = json.optBoolean("silentUpdate", false)
+            )
         } catch (e: Exception) {
             android.util.Log.e("DefaultAnimeRepository", "Failed to check update", e)
             null
