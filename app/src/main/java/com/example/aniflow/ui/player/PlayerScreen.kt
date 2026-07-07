@@ -60,6 +60,7 @@ import com.example.aniflow.ui.player.components.SpeedSelector
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import io.ktor.client.request.header
+import io.ktor.client.request.get
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 
@@ -160,11 +161,10 @@ fun PlayerScreen(
                 if (source.url.contains("proxy") || source.url.contains("anilight.live/lb")) {
                     try {
                         val client = NetworkModule.client
-                        client.prepareGet(source.url) {
+                        val response = client.get(source.url) {
                             headers?.forEach { (k, v) -> header(k, v) }
-                        }.execute { response ->
-                            response.call.request.url.toString()
                         }
+                        response.call.request.url.toString()
                     } catch (e: Exception) {
                         android.util.Log.e("PlayerScreen", "Failed to resolve redirect", e)
                         source.url
