@@ -66,7 +66,7 @@ def get_app_version():
         print("Error: Could not parse versionCode or versionName from app/build.gradle.kts")
         sys.exit(1)
         
-    return int(version_code_match.group(1)), version_name_match.group(2), content
+    return int(version_code_match.group(1)), version_name_match.group(1), content
 
 def update_gradle_version(new_code, new_name, original_content):
     gradle_file_path = "app/build.gradle.kts"
@@ -95,7 +95,7 @@ object UpdateConfig {{
 
 def build_apk():
     print("Building app APK using Gradle...")
-    gradlew = "./gradlew.bat" if os.name == "nt" else "./gradlew"
+    gradlew = "gradlew.bat" if os.name == "nt" else "./gradlew"
     
     # Run assembleDebug or assembleRelease. We use assembleRelease by default, or debug for ease of use.
     # Let's ask the user
