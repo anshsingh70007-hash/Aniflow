@@ -60,6 +60,18 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    private val checkUpdatesKey = booleanPreferencesKey("check_updates_startup")
+
+    val checkUpdatesStartup: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
+        prefs[checkUpdatesKey] ?: true
+    }
+
+    suspend fun setCheckUpdatesStartup(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[checkUpdatesKey] = enabled
+        }
+    }
+
     suspend fun setThemeMode(mode: String) {
         context.settingsDataStore.edit { prefs ->
             prefs[themeModeKey] = mode

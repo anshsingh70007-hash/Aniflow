@@ -24,4 +24,5 @@ interface AnimeRepository {
     suspend fun getEpisodes(animeId: Int, title: String): List<Episode>
     suspend fun getStreamingSources(episodeId: String): EpisodeSourcesResponse
     suspend fun checkUpdates(): AppUpdateInfo?
+    suspend fun refreshSchedule(): Pair<List<AiringAnime>, List<Anime>>
 }

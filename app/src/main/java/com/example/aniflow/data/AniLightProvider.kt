@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import java.net.URLEncoder
 import java.util.regex.Pattern
+import kotlinx.coroutines.*
 
 @Serializable
 data class ProviderSearchResult(
@@ -189,8 +190,11 @@ class AniLightProvider(private val client: HttpClient) {
             }
             
             // Default servers to try if fetch fails or servers is null
-            val subServers = servers?.subProviders?.map { it.id } ?: listOf("light", "misa", "near", "raye", "rem", "ryu")
-            val dubServers = servers?.dubProviders?.map { it.id } ?: listOf("light", "misa", "near", "raye", "ryu")
+            val subDefault = servers?.subProviders?.find { it.default }?.id
+            val subServers = (listOfNotNull(subDefault) + (servers?.subProviders?.map { it.id } ?: listOf("light", "misa", "near", "raye", "rem", "ryu", "meg"))).distinct()
+            
+            val dubDefault = servers?.dubProviders?.find { it.default }?.id
+            val dubServers = (listOfNotNull(dubDefault) + (servers?.dubProviders?.map { it.id } ?: listOf("light", "misa", "near", "raye", "ryu", "meg"))).distinct()
             
             val resolvedSources = mutableListOf<StreamingSource>()
             val resolvedSubtitles = mutableListOf<SubtitleTrack>()
@@ -203,68 +207,96 @@ class AniLightProvider(private val client: HttpClient) {
             )
             
             for ((type, providersList) in serverGroups) {
-                for (provId in providersList) {
-                    try {
-                        val sourcesUrl = "$baseUrl/sources?id=$animeId&epNum=$epNum&type=$type&providerId=$provId"
-                        android.util.Log.d("AniLightProvider", "Fetching sources from: $sourcesUrl")
-                        val res = retryWithBackoff(retries = 3) {
-                            val sourcesResponse = client.get(sourcesUrl) {
-                                header("User-Agent", userAgent)
-                            }
-                            if (sourcesResponse.status == HttpStatusCode.OK) {
-                                json.decodeFromString<AniLightSourcesResponse>(sourcesResponse.bodyAsText())
-                            } else null
-                        }
-                        if (res != null) {
-                            // Map subtitles
-                            res.tracks.forEach { track ->
-                                val subtitleUrl = track.file ?: track.url ?: ""
-                                if (subtitleUrl.isNotEmpty()) {
-                                     val mappedSubUrl = mapSubtitlesUrl(subtitleUrl)
-                                     val lang = track.lang ?: track.label ?: "English"
-                                     val label = track.label ?: lang
-                                     val exists = resolvedSubtitles.any { it.url == mappedSubUrl }
-                                     if (!exists) {
-                                         resolvedSubtitles.add(SubtitleTrack(url = mappedSubUrl, lang = lang, label = label))
-                                     }
+                val deferredResults = coroutineScope {
+                    providersList.map { provId ->
+                        async {
+                            try {
+                                val sourcesUrl = "$baseUrl/sources?id=$animeId&epNum=$epNum&type=$type&providerId=$provId"
+                                val res = retryWithBackoff(retries = 3) {
+                                    val sourcesResponse = client.get(sourcesUrl) {
+                                        header("User-Agent", userAgent)
+                                    }
+                                    if (sourcesResponse.status == HttpStatusCode.OK) {
+                                        json.decodeFromString<AniLightSourcesResponse>(sourcesResponse.bodyAsText())
+                                    } else null
                                 }
+                                if (res != null) Pair(provId, res) else null
+                            } catch (e: Exception) {
+                                android.util.Log.w("AniLightProvider", "Failed to fetch source for provider '$provId' ($type)", e)
+                                null
                             }
+                        }
+                    }
+                }
+                
+                val results = deferredResults.awaitAll().filterNotNull()
+                for ((provId, res) in results) {
+                    if (res.sources.isNotEmpty()) {
+                        // Map subtitles
+                        res.tracks.forEach { track ->
+                            val subtitleUrl = track.file ?: track.url ?: ""
+                            if (subtitleUrl.isNotEmpty()) {
+                                 val mappedSubUrl = mapSubtitlesUrl(subtitleUrl)
+                                 val lang = track.lang ?: track.label ?: "English"
+                                 val label = track.label ?: lang
+                                 val exists = resolvedSubtitles.any { it.url == mappedSubUrl }
+                                 if (!exists) {
+                                     resolvedSubtitles.add(SubtitleTrack(url = mappedSubUrl, lang = lang, label = label))
+                                 }
+                            }
+                        }
+                        
+                        // Find first subtitle URL in this response to extract the CDN domain
+                        val subTrackUrl = res.tracks.firstOrNull { (it.file ?: it.url ?: "").isNotEmpty() }?.let { it.file ?: it.url }
+                            ?: resolvedSubtitles.firstOrNull()?.url
+
+                        // Map sources
+                        res.sources.forEach { src ->
+                            val urls = extractUrls(src.url)
+                            val quality = src.quality ?: "Auto"
+                            val isM3U8 = urls.any { it.contains(".m3u8") } || src.type == "hls"
                             
-                            // Map sources
-                            res.sources.forEach { src ->
-                                val urls = extractUrls(src.url)
-                                val quality = src.quality ?: "Auto"
-                                val isM3U8 = urls.any { it.contains(".m3u8") } || src.type == "hls"
-                                
-                                urls.forEach { rawUrl ->
-                                    val mappedUrls = decryptUrl(rawUrl, provId)
-                                    mappedUrls.forEach { finalUrl ->
-                                        // Pick appropriate Referer header if needed
-                                        val referrer = try {
-                                            val parsed = io.ktor.http.Url(rawUrl)
-                                            "${parsed.protocol.name}://${parsed.host}/"
-                                        } catch (e: Exception) {
-                                            "https://api.anilight.live/"
-                                        }
-                                        customHeaders["Referer"] = referrer
-                                        
-                                        resolvedSources.add(
-                                            StreamingSource(
-                                                url = finalUrl,
-                                                quality = "$quality ($provId - ${type.uppercase()})",
-                                                isM3U8 = isM3U8 || finalUrl.contains(".m3u8"),
-                                                headers = mapOf(
-                                                    "Referer" to referrer,
-                                                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                                                )
+                            urls.forEach { rawUrl ->
+                                val mappedUrls = if (rawUrl.contains("/cachesub/")) {
+                                    val folder = rawUrl.substringAfter("/cachesub/").substringBefore("/")
+                                    if (folder.isNotEmpty() && folder != rawUrl) {
+                                        val subHost = subTrackUrl?.let { android.net.Uri.parse(it).host } ?: "ani10.nukitashi.top"
+                                        listOf("https://$subHost/$folder/index.m3u8")
+                                    } else {
+                                        decryptUrl(rawUrl, provId)
+                                    }
+                                } else {
+                                    decryptUrl(rawUrl, provId)
+                                }
+                                mappedUrls.forEach { finalUrl ->
+                                    val referrer = "https://anilight.live/"
+                                    customHeaders["Referer"] = referrer
+                                    
+                                    val serverName = when(provId.lowercase()) {
+                                        "light" -> "LIGHT"
+                                        "misa", "misora" -> "MISORA"
+                                        "meg" -> "MEG"
+                                        "near" -> "NEAR"
+                                        "raye" -> "RAYE"
+                                        "ryu" -> "RYU"
+                                        "rem" -> "REM"
+                                        else -> provId.uppercase()
+                                    }
+
+                                    resolvedSources.add(
+                                        StreamingSource(
+                                            url = finalUrl,
+                                            quality = "$serverName - $quality (${type.uppercase()})",
+                                            isM3U8 = isM3U8 || finalUrl.contains(".m3u8"),
+                                            headers = mapOf(
+                                                "Referer" to referrer,
+                                                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                                             )
                                         )
-                                    }
+                                    )
                                 }
                             }
                         }
-                    } catch (e: Exception) {
-                        android.util.Log.w("AniLightProvider", "Failed to fetch source for provider '$provId' ($type)", e)
                     }
                 }
             }
@@ -316,79 +348,74 @@ class AniLightProvider(private val client: HttpClient) {
             return listOf("$baseUrl/proxy/ryu?url=${URLEncoder.encode(url, "UTF-8")}")
         }
         
-        return z3(url)
+        return listOf(mapProxyUrl(url, providerId))
     }
 
-    private fun z3(url: String): List<String> {
-        var urls = listOf(url)
-        
-        // Rule 1: cdn.mewstream.buzz/ -> j3nd.voltara.click/
-        urls = urls.flatMap { u ->
-            if (u.contains("cdn.mewstream.buzz/")) {
-                listOf(u.replace("cdn.mewstream.buzz/", "j3nd.voltara.click/"))
-            } else listOf(u)
+    private fun mapProxyUrl(url: String, providerId: String): String {
+        if (url.startsWith("/lb/") || url.contains("/proxy")) {
+            return if (url.startsWith("/")) "$baseUrl$url" else url
         }
-        
-        // Rule 2: s2.cinewave2.site/anime/ -> [j5b9s.streamzone1.site/anime/, 9hjkrt.nekostream.site/, p4m9q.cinewave2.site/anime/]
-        urls = urls.flatMap { u ->
-            if (u.contains("s2.cinewave2.site/anime/")) {
-                listOf(
-                    u.replace("s2.cinewave2.site/anime/", "j5b9s.streamzone1.site/anime/"),
-                    u.replace("s2.cinewave2.site/anime/", "9hjkrt.nekostream.site/"),
-                    u.replace("s2.cinewave2.site/anime/", "p4m9q.cinewave2.site/anime/")
-                )
-            } else listOf(u)
-        }
-        
-        // Rule 3: s1.streamzone1.site/anime/ -> [j5b9s.streamzone1.site/anime/, 9hjkrt.nekostream.site/, p4m9q.cinewave2.site/anime/]
-        urls = urls.flatMap { u ->
-            if (u.contains("s1.streamzone1.site/anime/")) {
-                listOf(
-                    u.replace("s1.streamzone1.site/anime/", "j5b9s.streamzone1.site/anime/"),
-                    u.replace("s1.streamzone1.site/anime/", "9hjkrt.nekostream.site/"),
-                    u.replace("s1.streamzone1.site/anime/", "p4m9q.cinewave2.site/anime/")
-                )
-            } else listOf(u)
-        }
-        
-        // Rule 4: vibeplayer.site -> vivibebe.site
-        urls = urls.flatMap { u ->
-            if (u.contains("vibeplayer.site")) {
-                listOf(u.replace("vibeplayer.site", "vivibebe.site"))
-            } else listOf(u)
-        }
-        
-        // Apply Worker & Domain proxies ($9 function)
-        return urls.map { u ->
-            val resolvedUrl = if (u.startsWith("/lb/")) {
-                "$baseUrl$u"
-            } else {
-                u
-            }
-            mapProxyUrl(resolvedUrl)
-        }.distinct()
-    }
-
-    private fun mapProxyUrl(url: String): String {
-        val workerDomains = listOf("cdn.mewstream.buzz", "j5b9s.streamzone1.site", "9hjkrt.nekostream.site", "j3nd.voltara.click", "p4m9q.cinewave2.site")
-        val nearDomains = listOf("hls.anidb.app")
-        val apiDomains = listOf("vivibebe.site", "vibeplayer.site", "bd.24stream.xyz")
         
         val encoded = URLEncoder.encode(url, "UTF-8")
-        return when {
-            workerDomains.any { url.contains(it) } -> "$baseUrl/lb/misa/proxy?url=$encoded"
-            nearDomains.any { url.contains(it) } -> "$baseUrl/lb/near/proxy?url=$encoded"
-            apiDomains.any { url.contains(it) } -> "$baseUrl/proxy?url=$encoded"
-            else -> url
+        return when (providerId) {
+            "near" -> "$baseUrl/lb/near/proxy?url=$encoded"
+            "misa", "misora" -> "$baseUrl/lb/misa/proxy?url=$encoded"
+            "raye" -> "$baseUrl/lb/raye/proxy?url=$encoded"
+            "ryu" -> "$baseUrl/proxy/ryu?url=$encoded"
+            else -> "$baseUrl/proxy?url=$encoded"
         }
     }
 
     private fun mapSubtitlesUrl(url: String): String {
-        val captionDomains = listOf("1oe.lostproject.club")
-        return if (captionDomains.any { url.contains(it) }) {
-            "$baseUrl/proxy/captions?url=${URLEncoder.encode(url, "UTF-8")}"
-        } else {
-            url
+        if (url.startsWith("/lb/") || url.contains("/proxy")) {
+            return if (url.startsWith("/")) "$baseUrl$url" else url
+        }
+        val encoded = URLEncoder.encode(url, "UTF-8")
+        return "$baseUrl/proxy/captions?url=$encoded"
+    }
+
+    suspend fun getSchedule(): List<AniLightScheduleEntry> {
+        return try {
+            val response = client.get("$baseUrl/schedule") {
+                header("User-Agent", userAgent)
+            }
+            if (response.status == HttpStatusCode.OK) {
+                json.decodeFromString<List<AniLightScheduleEntry>>(response.bodyAsText())
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AniLightProvider", "Failed to fetch schedule", e)
+            emptyList()
         }
     }
 }
+
+@Serializable
+data class AniLightScheduleEntry(
+    val id: Int,
+    val episode: Int,
+    val airingAt: Long,
+    val anime: AniLightScheduleAnime
+)
+
+@Serializable
+data class AniLightScheduleAnime(
+    val id: Int,
+    val slug: String,
+    val anilistId: Int? = null,
+    val title: AniLightTitle,
+    val coverImage: AniLightCoverImage? = null,
+    val status: String? = null,
+    val averageScore: Int? = null,
+    val genres: List<String> = emptyList(),
+    val description: String? = null,
+    val episodes: Int? = null,
+    val nextAiringEpisode: AniLightNextAiringEpisode? = null
+)
+
+@Serializable
+data class AniLightNextAiringEpisode(
+    val episode: Int,
+    val airingAt: Long
+)

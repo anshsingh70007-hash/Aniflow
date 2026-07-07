@@ -19,6 +19,24 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
     private val aniLightProvider = AniLightProvider(client)
     private val settingsStore = SettingsStore(context)
 
+    private var cachedSchedule: List<com.example.aniflow.data.AniLightScheduleEntry>? = null
+    private var lastScheduleFetchTime: Long = 0L
+    private val SCHEDULE_CACHE_DURATION_MS = 5 * 60 * 1000L // 5 minutes
+
+    private suspend fun getCachedSchedule(): List<com.example.aniflow.data.AniLightScheduleEntry> {
+        val now = System.currentTimeMillis()
+        val cached = cachedSchedule
+        if (cached != null && now - lastScheduleFetchTime < SCHEDULE_CACHE_DURATION_MS) {
+            return cached
+        }
+        val fresh = aniLightProvider.getSchedule()
+        if (fresh.isNotEmpty()) {
+            cachedSchedule = fresh
+            lastScheduleFetchTime = now
+        }
+        return fresh.ifEmpty { cached ?: emptyList() }
+    }
+
     override fun getTrending(): Flow<List<Anime>> = flow {
         val list = aniListApi.getTrending()
         emit(list.ifEmpty { getFallbackAnimeList() })
@@ -35,8 +53,8 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
     }.flowOn(Dispatchers.IO)
 
     override fun getAiringToday(): Flow<List<AiringAnime>> = flow {
-        val list = aniListApi.getAiringToday()
-        emit(list.ifEmpty { getFallbackAiringList() })
+        val data = refreshSchedule()
+        emit(data.first.ifEmpty { getFallbackAiringList() })
     }.flowOn(Dispatchers.IO)
 
     override fun getTopRated(): Flow<List<Anime>> = flow {
@@ -50,8 +68,8 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
     }.flowOn(Dispatchers.IO)
 
     override fun getRecentlyUpdated(): Flow<List<Anime>> = flow {
-        val list = aniListApi.getRecentlyUpdated()
-        emit(list.ifEmpty { getFallbackAnimeList() })
+        val data = refreshSchedule()
+        emit(data.second.ifEmpty { getFallbackAnimeList() })
     }.flowOn(Dispatchers.IO)
 
     override fun getActionAnime(): Flow<List<Anime>> = flow {
@@ -248,5 +266,51 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
             android.util.Log.e("DefaultAnimeRepository", "Failed to check update", e)
             null
         }
+    }
+
+    override suspend fun refreshSchedule(): Pair<List<AiringAnime>, List<Anime>> = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val schedule = getCachedSchedule()
+        val now = System.currentTimeMillis() / 1000
+
+        // Airing Today: upcoming today in user's local timezone
+        val calendar = java.util.Calendar.getInstance()
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        calendar.set(java.util.Calendar.MINUTE, 0)
+        calendar.set(java.util.Calendar.SECOND, 0)
+        calendar.set(java.util.Calendar.MILLISECOND, 0)
+        val localDayStart = calendar.timeInMillis / 1000
+        val localDayEnd = localDayStart + 86400
+
+        val airingTodayList = schedule.filter { entry ->
+            entry.airingAt > now && entry.airingAt <= localDayEnd
+        }.map { entry ->
+            AiringAnime(
+                mediaId = entry.anime.anilistId ?: entry.anime.id,
+                title = entry.anime.title.english ?: entry.anime.title.romaji ?: entry.anime.title.native ?: "Airing Anime",
+                coverImageUrl = entry.anime.coverImage?.large ?: entry.anime.coverImage?.extraLarge ?: "",
+                airingAt = entry.airingAt,
+                episode = entry.episode
+            )
+        }
+
+        // Recently Released: already aired/released
+        val recentlyUpdatedList = schedule.filter { entry ->
+            entry.airingAt <= now
+        }.sortedByDescending { entry ->
+            entry.airingAt
+        }.map { entry ->
+            Anime(
+                id = entry.anime.anilistId ?: entry.anime.id,
+                title = entry.anime.title.english ?: entry.anime.title.romaji ?: entry.anime.title.native ?: "Anime Title",
+                englishTitle = entry.anime.title.english,
+                coverImage = entry.anime.coverImage?.large ?: entry.anime.coverImage?.extraLarge ?: "",
+                episodes = entry.episode,
+                status = entry.anime.status ?: "RELEASING",
+                genres = entry.anime.genres,
+                averageScore = entry.anime.averageScore
+            )
+        }
+
+        Pair(airingTodayList, recentlyUpdatedList)
     }
 }

@@ -59,8 +59,7 @@ import com.example.aniflow.ui.player.components.SubtitleSelector
 import com.example.aniflow.ui.player.components.SpeedSelector
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import io.ktor.client.request.header
-import io.ktor.client.request.get
+import io.ktor.client.request.*
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 
@@ -98,6 +97,8 @@ fun PlayerScreen(
     val selectedSource by viewModel.selectedSource.collectAsStateWithLifecycle()
     val selectedSubtitle by viewModel.selectedSubtitle.collectAsStateWithLifecycle()
 
+    var showServerSelector by remember { mutableStateOf(false) }
+
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     var currentVolume by remember { mutableStateOf(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)) }
     val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
@@ -108,7 +109,7 @@ fun PlayerScreen(
             .setAllowCrossProtocolRedirects(true)
     }
 
-    val exoPlayer = remember {
+    val exoPlayer = remember(animeId, episodeNumber) {
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(1500, 50000, 500, 1500)
             .build()
@@ -132,13 +133,18 @@ fun PlayerScreen(
                 viewModel.isPlaying.value = playing
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                viewModel.errorMessage.value = "Playback error: ${error.errorCodeName}"
-                viewModel.hasError.value = true
+                viewModel.handlePlaybackError(error.errorCodeName)
             }
         }
         exoPlayer.addListener(listener)
         onDispose {
             exoPlayer.removeListener(listener)
+            val pos = exoPlayer.currentPosition
+            val dur = exoPlayer.duration
+            if (pos > 0 && dur > 0) {
+                viewModel.saveProgress(animeId, pos, dur)
+            }
+            exoPlayer.release()
         }
     }
 
@@ -149,6 +155,8 @@ fun PlayerScreen(
     LaunchedEffect(selectedSource) {
         val source = selectedSource
         if (source != null) {
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
             viewModel.isBuffering.value = true
             val headers = source.headers ?: streamingSources?.headers
             if (headers != null && headers.isNotEmpty()) {
@@ -158,45 +166,46 @@ fun PlayerScreen(
             }
 
             val resolvedUrl = withContext(Dispatchers.IO) {
-                if (source.url.contains("proxy") || source.url.contains("anilight.live/lb")) {
-                    try {
-                        val tempClient = io.ktor.client.HttpClient(io.ktor.client.engine.android.Android) {
-                            followRedirects = false
-                        }
-                        var currentUrl = source.url
-                        var hops = 0
-                        while (hops < 5 && (currentUrl.contains("proxy") || currentUrl.contains("anilight.live/lb"))) {
-                            val response = tempClient.get(currentUrl) {
+                try {
+                    val tempClient = NetworkModule.redirectClient
+                    var currentUrl = source.url
+                    var hops = 0
+                    while (hops < 5) {
+                        var nextUrl: String? = null
+                        try {
+                            tempClient.prepareGet(currentUrl) {
                                 headers?.forEach { (k, v) -> header(k, v) }
-                            }
-                            if (response.status == io.ktor.http.HttpStatusCode.Found ||
-                                response.status == io.ktor.http.HttpStatusCode.MovedPermanently ||
-                                response.status == io.ktor.http.HttpStatusCode.TemporaryRedirect ||
-                                response.status == io.ktor.http.HttpStatusCode.SeeOther
-                            ) {
-                                val location = response.headers[io.ktor.http.HttpHeaders.Location]
-                                if (location != null) {
-                                    currentUrl = if (location.startsWith("http")) {
-                                        location
-                                    } else {
-                                        val baseUri = io.ktor.http.Url(currentUrl)
-                                        "${baseUri.protocol.name}://${baseUri.host}$location"
+                            }.execute { response ->
+                                if (response.status == io.ktor.http.HttpStatusCode.Found ||
+                                    response.status == io.ktor.http.HttpStatusCode.MovedPermanently ||
+                                    response.status == io.ktor.http.HttpStatusCode.TemporaryRedirect ||
+                                    response.status == io.ktor.http.HttpStatusCode.SeeOther
+                                ) {
+                                    val location = response.headers[io.ktor.http.HttpHeaders.Location]
+                                    if (location != null) {
+                                        nextUrl = if (location.startsWith("http")) {
+                                            location
+                                        } else {
+                                            val baseUri = io.ktor.http.Url(currentUrl)
+                                            "${baseUri.protocol.name}://${baseUri.host}$location"
+                                        }
                                     }
-                                } else {
-                                    break
                                 }
-                            } else {
-                                break
                             }
-                            hops++
+                        } catch (e: Exception) {
+                            android.util.Log.e("PlayerScreen", "Error resolving redirect hop $hops", e)
+                            break
                         }
-                        tempClient.close()
-                        currentUrl
-                    } catch (e: Exception) {
-                        android.util.Log.e("PlayerScreen", "Failed to resolve redirect", e)
-                        source.url
+                        if (nextUrl != null) {
+                            currentUrl = nextUrl!!
+                        } else {
+                            break
+                        }
+                        hops++
                     }
-                } else {
+                    currentUrl
+                } catch (e: Exception) {
+                    android.util.Log.e("PlayerScreen", "Failed to resolve redirect", e)
                     source.url
                 }
             }
@@ -240,7 +249,7 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(selectedSubtitle) {
+    LaunchedEffect(selectedSubtitle, exoPlayer) {
         val sub = selectedSubtitle
         val parameters = exoPlayer.trackSelectionParameters
             .buildUpon()
@@ -262,17 +271,6 @@ fun PlayerScreen(
                 viewModel.totalDuration.value = exoPlayer.duration
                 viewModel.saveProgress(animeId, exoPlayer.currentPosition, exoPlayer.duration)
             }
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            val pos = exoPlayer.currentPosition
-            val dur = exoPlayer.duration
-            if (pos > 0 && dur > 0) {
-                viewModel.saveProgress(animeId, pos, dur)
-            }
-            exoPlayer.release()
         }
     }
 
@@ -311,11 +309,21 @@ fun PlayerScreen(
                 Spacer(Modifier.height(16.dp))
                 Text(text = errorMessage, color = TextPrimary, fontSize = 18.sp)
                 Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = { viewModel.loadStreamingSourcesForIndex(currentEpisodeIndex) },
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent)
-                ) {
-                    Text("Retry")
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Button(
+                        onClick = { viewModel.loadStreamingSourcesForIndex(currentEpisodeIndex) },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent)
+                    ) {
+                        Text("Retry")
+                    }
+                    if (streamingSources != null && streamingSources!!.sources.isNotEmpty()) {
+                        Button(
+                            onClick = { showServerSelector = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = SecondaryAccent)
+                        ) {
+                            Text("Switch Server")
+                        }
+                    }
                 }
             }
         } else {
@@ -350,7 +358,9 @@ fun PlayerScreen(
                         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0)
                         currentVolume = it
                     },
-                    onBack = onBack
+                    onBack = onBack,
+                    showServerSelector = showServerSelector,
+                    onShowServerSelectorChange = { showServerSelector = it }
                 )
             }
         }
@@ -365,7 +375,9 @@ fun PlayerControlsOverlay(
     volume: Int,
     maxVolume: Int,
     onVolumeChange: (Int) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    showServerSelector: Boolean,
+    onShowServerSelectorChange: (Boolean) -> Unit
 ) {
     val anime by viewModel.anime.collectAsStateWithLifecycle()
     val episodeList by viewModel.episodeList.collectAsStateWithLifecycle()
@@ -381,7 +393,6 @@ fun PlayerControlsOverlay(
     var controlsVisible by remember { mutableStateOf(true) }
     val focusRequester = remember { FocusRequester() }
     
-    var showQualitySelector by remember { mutableStateOf(false) }
     var showSubtitleSelector by remember { mutableStateOf(false) }
     var showSpeedSelector by remember { mutableStateOf(false) }
 
@@ -588,8 +599,8 @@ fun PlayerControlsOverlay(
                                     onClick = { viewModel.playNextEpisode() }
                                 )
                                 TvPlayerControlItem(
-                                    text = "Quality",
-                                    onClick = { showQualitySelector = true }
+                                    text = "Server",
+                                    onClick = { onShowServerSelectorChange(true) }
                                 )
                                 TvPlayerControlItem(
                                     text = "Subtitles",
@@ -606,8 +617,8 @@ fun PlayerControlsOverlay(
                                 TextButton(onClick = { player.seekTo((player.currentPosition + 10000).coerceAtMost(player.duration)) }) {
                                     Text("+10s", color = TextPrimary, fontWeight = FontWeight.Bold)
                                 }
-                                TextButton(onClick = { showQualitySelector = true }) {
-                                    Text("Quality", color = TextPrimary, fontWeight = FontWeight.Bold)
+                                TextButton(onClick = { onShowServerSelectorChange(true) }) {
+                                    Text("Server", color = TextPrimary, fontWeight = FontWeight.Bold)
                                 }
                                 TextButton(onClick = { showSubtitleSelector = true }) {
                                     Text("Sub", color = TextPrimary, fontWeight = FontWeight.Bold)
@@ -623,12 +634,12 @@ fun PlayerControlsOverlay(
         }
     }
 
-    if (showQualitySelector && streamingSources != null) {
+    if (showServerSelector && streamingSources != null) {
         QualitySelector(
             sources = streamingSources!!.sources,
             selectedSource = selectedSource,
             onSelect = { viewModel.selectSource(it) },
-            onDismiss = { showQualitySelector = false }
+            onDismiss = { onShowServerSelectorChange(false) }
         )
     }
 

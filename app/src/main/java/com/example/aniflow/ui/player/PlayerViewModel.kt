@@ -32,6 +32,8 @@ class PlayerViewModel(
     val selectedSource = MutableStateFlow<StreamingSource?>(null)
     val selectedSubtitle = MutableStateFlow<SubtitleTrack?>(null)
 
+    private val failedSources = mutableSetOf<String>()
+
     fun loadAnimeDetails(animeId: Int, episodeNumber: Int) {
         viewModelScope.launch {
             isLoading.value = true
@@ -61,6 +63,7 @@ class PlayerViewModel(
         viewModelScope.launch {
             isLoading.value = true
             hasError.value = false
+            failedSources.clear()
             try {
                 val sources = repository.getStreamingSources(ep.id)
                 streamingSources.value = sources
@@ -74,6 +77,22 @@ class PlayerViewModel(
             } finally {
                 isLoading.value = false
             }
+        }
+    }
+
+    fun handlePlaybackError(errorName: String) {
+        val currentSource = selectedSource.value ?: return
+        failedSources.add(currentSource.url)
+        
+        val sources = streamingSources.value?.sources ?: return
+        val nextSource = sources.find { it.url !in failedSources }
+        
+        if (nextSource != null) {
+            android.util.Log.d("PlayerViewModel", "Playback failed with $errorName. Trying next source: ${nextSource.quality}")
+            selectedSource.value = nextSource
+        } else {
+            errorMessage.value = "Playback error: $errorName. All servers failed."
+            hasError.value = true
         }
     }
 

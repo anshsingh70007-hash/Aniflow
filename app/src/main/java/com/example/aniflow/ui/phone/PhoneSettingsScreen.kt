@@ -40,6 +40,7 @@ fun PhoneSettingsScreen(
     val qualityPref by settingsStore.qualityPreference.collectAsState(initial = "auto")
     val languagePref by settingsStore.languagePreference.collectAsState(initial = "sub")
     val autoSkipIntroPref by settingsStore.autoSkipIntro.collectAsState(initial = false)
+    val checkUpdatesPref by settingsStore.checkUpdatesStartup.collectAsState(initial = true)
     val themePref by settingsStore.themeMode.collectAsState(initial = "system")
 
     var qualityExpanded by remember { mutableStateOf(false) }
@@ -152,6 +153,25 @@ fun PhoneSettingsScreen(
                     onCheckedChange = { value ->
                         coroutineScope.launch {
                             settingsStore.setAutoSkipIntro(value)
+                        }
+                    },
+                    colors = SwitchDefaults.colors(checkedThumbColor = PrimaryAccent, checkedTrackColor = PrimaryAccentLight)
+                )
+            },
+            colors = ListItemDefaults.colors(containerColor = SurfaceCard)
+        )
+        Spacer(Modifier.height(8.dp))
+
+        // Check for updates automatically on startup
+        ListItem(
+            headlineContent = { Text("Check Updates on Startup", color = TextPrimary) },
+            supportingContent = { Text("Automatically check for new versions when the app starts", color = TextSecondary) },
+            trailingContent = {
+                Switch(
+                    checked = checkUpdatesPref,
+                    onCheckedChange = { value ->
+                        coroutineScope.launch {
+                            settingsStore.setCheckUpdatesStartup(value)
                         }
                     },
                     colors = SwitchDefaults.colors(checkedThumbColor = PrimaryAccent, checkedTrackColor = PrimaryAccentLight)

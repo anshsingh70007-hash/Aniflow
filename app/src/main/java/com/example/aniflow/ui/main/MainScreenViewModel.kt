@@ -71,11 +71,37 @@ class MainScreenViewModel(
         observeHistory()
         setupSearchDebounce()
         checkForUpdates()
+        startPeriodicRefresh()
+    }
+
+    private fun startPeriodicRefresh() {
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(15 * 60 * 1000L) // 15 minutes
+                try {
+                    val (airing, recent) = repository.refreshSchedule()
+                    _airingToday.value = airing
+                    _recentlyUpdated.value = recent
+                    android.util.Log.d("MainScreenViewModel", "Periodic schedule refresh successful: ${airing.size} airing, ${recent.size} recent")
+                } catch (e: Exception) {
+                    android.util.Log.e("MainScreenViewModel", "Periodic schedule refresh failed", e)
+                }
+            }
+        }
+    }
+
+    private val settingsStore = SettingsStore(context)
+
+    fun dismissUpdate() {
+        _updateInfo.value = null
     }
 
     private fun checkForUpdates() {
         viewModelScope.launch {
             try {
+                val autoCheckEnabled = settingsStore.checkUpdatesStartup.first()
+                if (!autoCheckEnabled) return@launch
+
                 val info = repository.checkUpdates()
                 val currentVersionCode = try {
                     val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)

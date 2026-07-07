@@ -24,4 +24,15 @@ object NetworkModule {
             }
         }
     }
+
+    val redirectClient: HttpClient by lazy {
+        HttpClient(Android) {
+            followRedirects = false
+            engine {
+                connectTimeout = 8_000
+                socketTimeout = 8_000
+            }
+        }
+    }
 }
+

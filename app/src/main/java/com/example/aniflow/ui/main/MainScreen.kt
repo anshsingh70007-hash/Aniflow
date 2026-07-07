@@ -75,50 +75,46 @@ fun MainScreen(
     val sStore = remember { settingsStore ?: SettingsStore(context) }
 
     updateInfo?.let { info ->
-        var showDialog by remember { mutableStateOf(true) }
-        
-        if (showDialog) {
-            AlertDialog(
-                onDismissRequest = { 
-                    if (!info.forceUpdate) {
-                        showDialog = false 
+        AlertDialog(
+            onDismissRequest = { 
+                if (!info.forceUpdate) {
+                    viewModel.dismissUpdate()
+                }
+            },
+            title = { Text("App Update Available", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = { 
+                Column {
+                    Text("Version ${info.versionName} is now available.", color = TextSecondary)
+                    info.updateNotes?.let { notes ->
+                        Spacer(Modifier.height(8.dp))
+                        Text("Changelog: $notes", color = TextSecondary, fontSize = 12.sp)
                     }
-                },
-                title = { Text("App Update Available", color = TextPrimary, fontWeight = FontWeight.Bold) },
-                text = { 
-                    Column {
-                        Text("Version ${info.versionName} is now available.", color = TextSecondary)
-                        info.updateNotes?.let { notes ->
-                            Spacer(Modifier.height(8.dp))
-                            Text("Changelog: $notes", color = TextSecondary, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { 
+                        com.example.aniflow.utils.AppUpdater.downloadAndInstall(context, info.updateUrl, info.versionName)
+                        if (!info.forceUpdate) {
+                            viewModel.dismissUpdate()
                         }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent)
+                ) {
+                    Text("Download Update", color = TextPrimary)
+                }
+            },
+            dismissButton = {
+                if (!info.forceUpdate) {
+                    TextButton(onClick = { viewModel.dismissUpdate() }) {
+                        Text("Later", color = TextSecondary)
                     }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { 
-                            com.example.aniflow.utils.AppUpdater.downloadAndInstall(context, info.updateUrl, info.versionName)
-                            if (!info.forceUpdate) {
-                                showDialog = false
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent)
-                    ) {
-                        Text("Download Update", color = TextPrimary)
-                    }
-                },
-                dismissButton = {
-                    if (!info.forceUpdate) {
-                        TextButton(onClick = { showDialog = false }) {
-                            Text("Later", color = TextSecondary)
-                        }
-                    }
-                },
-                containerColor = SurfaceCard,
-                textContentColor = TextSecondary,
-                titleContentColor = TextPrimary
-            )
-        }
+                }
+            },
+            containerColor = SurfaceCard,
+            textContentColor = TextSecondary,
+            titleContentColor = TextPrimary
+        )
     }
 
     if (deviceType == DeviceType.TV) {
