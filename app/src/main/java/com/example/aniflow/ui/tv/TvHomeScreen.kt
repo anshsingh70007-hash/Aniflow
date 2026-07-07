@@ -62,7 +62,7 @@ fun TvHomeScreen(
         // Continue Watching
         if (history.isNotEmpty()) {
             item {
-                TvContinueWatchingRow(title = "⏳ Continue Watching", list = history, onHistoryClick = onHistoryClick)
+                TvContinueWatchingRow(title = "🎬 Continue Watching", list = history, onHistoryClick = onHistoryClick)
             }
         }
 

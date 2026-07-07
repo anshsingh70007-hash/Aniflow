@@ -59,7 +59,7 @@ fun PhoneHomeScreen(
         // Continue Watching Row
         if (history.isNotEmpty()) {
             item {
-                ContinueWatchingRow(title = "⏳ Continue Watching", list = history, onHistoryClick = onHistoryClick)
+                ContinueWatchingRow(title = "🎬 Continue Watching", list = history, onHistoryClick = onHistoryClick)
             }
         }
 
