@@ -270,6 +270,8 @@ fun PhoneSettingsScreen(
                                         } catch (e: Exception) {
                                             1
                                         }
+                                        android.util.Log.d("PhoneSettingsScreen", "info: $info, currentVersionCode: $currentVersionCode")
+                                        android.widget.Toast.makeText(context, "Checked: Server=${info?.versionCode}, Current=$currentVersionCode", android.widget.Toast.LENGTH_SHORT).show()
                                         if (info != null && info.versionCode > currentVersionCode && !info.silentUpdate) {
                                             foundUpdate = info
                                             updateCheckState = "update_available"
@@ -277,6 +279,8 @@ fun PhoneSettingsScreen(
                                             updateCheckState = "up_to_date"
                                         }
                                     } catch (e: Exception) {
+                                        android.util.Log.e("PhoneSettingsScreen", "Update check failed", e)
+                                        android.widget.Toast.makeText(context, "Error: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
                                         updateCheckState = "up_to_date"
                                     }
                                 }

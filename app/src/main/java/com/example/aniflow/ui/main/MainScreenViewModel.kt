@@ -88,11 +88,12 @@ class MainScreenViewModel(
                 } catch (e: Exception) {
                     1
                 }
+                android.util.Log.d("MainScreenViewModel", "checkForUpdates: info=$info, current=$currentVersionCode")
                 if (info != null && info.versionCode > currentVersionCode && !info.silentUpdate) {
                     _updateInfo.value = info
                 }
             } catch (e: Exception) {
-                // ignore
+                android.util.Log.e("MainScreenViewModel", "Error checking updates", e)
             }
         }
     }
