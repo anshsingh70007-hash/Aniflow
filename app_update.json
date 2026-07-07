@@ -1,8 +1,8 @@
 {
-  "versionCode": 26,
-  "versionName": "1.7.9",
-  "updateUrl": "https://raw.githubusercontent.com/anshsingh70007-hash/Aniflow/main/releases/AniFinal_1.7.9.apk",
-  "updateNotes": "UI Testing Update: Changed Continue Watching row emoji to ??.",
+  "versionCode": 27,
+  "versionName": "1.7.10",
+  "updateUrl": "https://raw.githubusercontent.com/anshsingh70007-hash/Aniflow/main/releases/AniFinal_1.7.10.apk",
+  "updateNotes": "Fix sorting of Airing Today and Recently Released lists; clean up and optimize ExoPlayer video redirect resolution; implement 15-minute auto-refresh.",
   "forceUpdate": false,
   "silentUpdate": false
 }
