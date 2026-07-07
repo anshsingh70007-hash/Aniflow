@@ -160,11 +160,38 @@ fun PlayerScreen(
             val resolvedUrl = withContext(Dispatchers.IO) {
                 if (source.url.contains("proxy") || source.url.contains("anilight.live/lb")) {
                     try {
-                        val client = NetworkModule.client
-                        val response = client.get(source.url) {
-                            headers?.forEach { (k, v) -> header(k, v) }
+                        val tempClient = io.ktor.client.HttpClient(io.ktor.client.engine.android.Android) {
+                            followRedirects = false
                         }
-                        response.call.request.url.toString()
+                        var currentUrl = source.url
+                        var hops = 0
+                        while (hops < 5 && (currentUrl.contains("proxy") || currentUrl.contains("anilight.live/lb"))) {
+                            val response = tempClient.get(currentUrl) {
+                                headers?.forEach { (k, v) -> header(k, v) }
+                            }
+                            if (response.status == io.ktor.http.HttpStatusCode.Found ||
+                                response.status == io.ktor.http.HttpStatusCode.MovedPermanently ||
+                                response.status == io.ktor.http.HttpStatusCode.TemporaryRedirect ||
+                                response.status == io.ktor.http.HttpStatusCode.SeeOther
+                            ) {
+                                val location = response.headers[io.ktor.http.HttpHeaders.Location]
+                                if (location != null) {
+                                    currentUrl = if (location.startsWith("http")) {
+                                        location
+                                    } else {
+                                        val baseUri = io.ktor.http.Url(currentUrl)
+                                        "${baseUri.protocol.name}://${baseUri.host}$location"
+                                    }
+                                } else {
+                                    break
+                                }
+                            } else {
+                                break
+                            }
+                            hops++
+                        }
+                        tempClient.close()
+                        currentUrl
                     } catch (e: Exception) {
                         android.util.Log.e("PlayerScreen", "Failed to resolve redirect", e)
                         source.url

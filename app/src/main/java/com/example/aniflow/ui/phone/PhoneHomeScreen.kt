@@ -41,7 +41,8 @@ fun PhoneHomeScreen(
     actionAnime: List<Anime>,
     romanceAnime: List<Anime>,
     history: List<WatchHistoryEntry>,
-    onAnimeClick: (Anime) -> Unit
+    onAnimeClick: (Anime) -> Unit,
+    onHistoryClick: (WatchHistoryEntry) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(PrimaryDark),
@@ -58,7 +59,7 @@ fun PhoneHomeScreen(
         // Continue Watching Row
         if (history.isNotEmpty()) {
             item {
-                ContinueWatchingRow(title = "⏳ Continue Watching", list = history, onAnimeClick = onAnimeClick)
+                ContinueWatchingRow(title = "⏳ Continue Watching", list = history, onHistoryClick = onHistoryClick)
             }
         }
 
@@ -345,7 +346,7 @@ fun AiringCard(item: AiringAnime) {
 fun ContinueWatchingRow(
     title: String,
     list: List<WatchHistoryEntry>,
-    onAnimeClick: (Anime) -> Unit
+    onHistoryClick: (WatchHistoryEntry) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -361,7 +362,7 @@ fun ContinueWatchingRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(list) { entry ->
-                ContinueWatchingCard(entry = entry, onAnimeClick = onAnimeClick)
+                ContinueWatchingCard(entry = entry, onHistoryClick = onHistoryClick)
             }
         }
     }
@@ -370,29 +371,15 @@ fun ContinueWatchingRow(
 @Composable
 fun ContinueWatchingCard(
     entry: WatchHistoryEntry,
-    onAnimeClick: (Anime) -> Unit,
+    onHistoryClick: (WatchHistoryEntry) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val anime = remember(entry) {
-        Anime(
-            id = entry.animeId,
-            title = entry.title,
-            coverImage = entry.coverImage,
-            bannerImage = null,
-            description = null,
-            episodes = null,
-            averageScore = null,
-            genres = emptyList(),
-            studioName = null
-        )
-    }
-
     Column(
         modifier = modifier
             .width(140.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(PrimaryDarker)
-            .clickable { onAnimeClick(anime) }
+            .clickable { onHistoryClick(entry) }
     ) {
         Box(
             modifier = Modifier

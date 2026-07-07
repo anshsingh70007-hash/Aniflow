@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import com.example.aniflow.Detail
+import com.example.aniflow.Player
 import com.example.aniflow.DeviceType
 import com.example.aniflow.data.SettingsStore
 import com.example.aniflow.data.WatchHistoryStore
@@ -158,7 +159,8 @@ fun MainScreen(
                             actionAnime = actionAnime,
                             romanceAnime = romanceAnime,
                             history = history,
-                            onAnimeClick = { onItemClick(Detail(it.id)) }
+                            onAnimeClick = { onItemClick(Detail(it.id)) },
+                            onHistoryClick = { onItemClick(Player(it.animeId, it.episodeNumber)) }
                         )
                         1 -> TvBrowseScreen(
                             query = searchQuery,
@@ -269,7 +271,8 @@ fun MainScreen(
                             actionAnime = actionAnime,
                             romanceAnime = romanceAnime,
                             history = history,
-                            onAnimeClick = { onItemClick(Detail(it.id)) }
+                            onAnimeClick = { onItemClick(Detail(it.id)) },
+                            onHistoryClick = { onItemClick(Player(it.animeId, it.episodeNumber)) }
                         )
                         1 -> PhoneBrowseScreen(
                             query = searchQuery,

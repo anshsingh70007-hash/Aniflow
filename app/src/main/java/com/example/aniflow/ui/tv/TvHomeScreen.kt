@@ -42,7 +42,8 @@ fun TvHomeScreen(
     actionAnime: List<Anime>,
     romanceAnime: List<Anime>,
     history: List<WatchHistoryEntry>,
-    onAnimeClick: (Anime) -> Unit
+    onAnimeClick: (Anime) -> Unit,
+    onHistoryClick: (WatchHistoryEntry) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -61,7 +62,7 @@ fun TvHomeScreen(
         // Continue Watching
         if (history.isNotEmpty()) {
             item {
-                TvContinueWatchingRow(title = "⏳ Continue Watching", list = history, onAnimeClick = onAnimeClick)
+                TvContinueWatchingRow(title = "⏳ Continue Watching", list = history, onHistoryClick = onHistoryClick)
             }
         }
 
@@ -352,7 +353,7 @@ fun TvAiringCard(item: AiringAnime) {
 fun TvContinueWatchingRow(
     title: String,
     list: List<WatchHistoryEntry>,
-    onAnimeClick: (Anime) -> Unit
+    onHistoryClick: (WatchHistoryEntry) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -367,7 +368,7 @@ fun TvContinueWatchingRow(
             contentPadding = PaddingValues(horizontal = 8.dp)
         ) {
             items(list) { entry ->
-                TvContinueWatchingCard(entry = entry, onAnimeClick = onAnimeClick)
+                TvContinueWatchingCard(entry = entry, onHistoryClick = onHistoryClick)
             }
         }
     }
@@ -376,24 +377,10 @@ fun TvContinueWatchingRow(
 @Composable
 fun TvContinueWatchingCard(
     entry: WatchHistoryEntry,
-    onAnimeClick: (Anime) -> Unit
+    onHistoryClick: (WatchHistoryEntry) -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isFocused) 1.05f else 1.0f)
-    
-    val anime = remember(entry) {
-        Anime(
-            id = entry.animeId,
-            title = entry.title,
-            coverImage = entry.coverImage,
-            bannerImage = null,
-            description = null,
-            episodes = null,
-            averageScore = null,
-            genres = emptyList(),
-            studioName = null
-        )
-    }
 
     Column(
         modifier = Modifier
@@ -409,7 +396,7 @@ fun TvContinueWatchingCard(
                 color = if (isFocused) SecondaryAccent else Color.Transparent,
                 shape = RoundedCornerShape(8.dp)
             )
-            .clickable { onAnimeClick(anime) }
+            .clickable { onHistoryClick(entry) }
             .onFocusChanged { isFocused = it.isFocused }
             .focusable()
     ) {
