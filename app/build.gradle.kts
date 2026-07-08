@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.aniflow"
         minSdk = 24
         targetSdk = 36
-        versionCode = 28
-        versionName = "1.7.11"
+        versionCode = 29
+        versionName = "1.7.12"
     }
 
     buildTypes {
