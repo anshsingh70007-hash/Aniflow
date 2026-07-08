@@ -19,8 +19,8 @@ object NetworkModule {
                 json(json)
             }
             engine {
-                connectTimeout = 10_000
-                socketTimeout = 15_000
+                connectTimeout = 30_000
+                socketTimeout = 30_000
             }
         }
     }

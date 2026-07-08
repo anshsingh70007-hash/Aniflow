@@ -223,22 +223,42 @@ class MainScreenViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // Critical path: wait for these to load first
-                val jobs = listOf(
-                    launch { repository.getTrending().collect { _trending.value = it } },
-                    launch { repository.getPopular().collect { _popular.value = it } },
-                    launch { repository.getSeasonal().collect { _seasonal.value = it } },
-                    launch { repository.getAiringToday().collect { _airingToday.value = it } }
+                // Critical path: load in two batches to avoid rate limiting
+                // Batch 1: Trending + Airing (most visible)
+                val batch1 = listOf(
+                    launch { repository.getTrending().catch { it.printStackTrace() }.collect { _trending.value = it } },
+                    launch { repository.getAiringToday().catch { it.printStackTrace() }.collect { _airingToday.value = it } }
                 )
-                jobs.forEach { it.join() }
+                batch1.forEach { it.join() }
+
+                // Batch 2: Popular + Seasonal
+                val batch2 = listOf(
+                    launch { repository.getPopular().catch { it.printStackTrace() }.collect { _popular.value = it } },
+                    launch { repository.getSeasonal().catch { it.printStackTrace() }.collect { _seasonal.value = it } }
+                )
+                batch2.forEach { it.join() }
                 _isLoading.value = false // Let user interact early!
 
-                // Background loading for non-critical lists
-                launch { repository.getTopRated().collect { _topRated.value = it } }
-                launch { repository.getUpcoming().collect { _upcoming.value = it } }
-                launch { repository.getRecentlyUpdated().collect { _recentlyUpdated.value = it } }
-                launch { repository.getActionAnime().collect { _actionAnime.value = it } }
-                launch { repository.getAnimeByGenre("Romance").collect { _romanceAnime.value = it } }
+                // If trending still looks like fallback data, retry once after a delay
+                if (_trending.value.size <= 3 && _trending.value.firstOrNull()?.id == 1535) {
+                    android.util.Log.w("MainScreenViewModel", "Trending appears to be fallback data, retrying...")
+                    kotlinx.coroutines.delay(3000L)
+                    launch { repository.getTrending().catch { it.printStackTrace() }.collect { _trending.value = it } }
+                    launch { repository.getAiringToday().catch { it.printStackTrace() }.collect { _airingToday.value = it } }
+                    kotlinx.coroutines.delay(1000L)
+                    launch { repository.getPopular().catch { it.printStackTrace() }.collect { _popular.value = it } }
+                    launch { repository.getSeasonal().catch { it.printStackTrace() }.collect { _seasonal.value = it } }
+                }
+
+                // Background loading for non-critical lists (staggered)
+                kotlinx.coroutines.delay(500L)
+                launch { repository.getRecentlyUpdated().catch { it.printStackTrace() }.collect { _recentlyUpdated.value = it } }
+                launch { repository.getTopRated().catch { it.printStackTrace() }.collect { _topRated.value = it } }
+                kotlinx.coroutines.delay(500L)
+                launch { repository.getUpcoming().catch { it.printStackTrace() }.collect { _upcoming.value = it } }
+                launch { repository.getActionAnime().catch { it.printStackTrace() }.collect { _actionAnime.value = it } }
+                kotlinx.coroutines.delay(500L)
+                launch { repository.getAnimeByGenre("Romance").catch { it.printStackTrace() }.collect { _romanceAnime.value = it } }
             } catch (e: Exception) {
                 e.printStackTrace()
                 _isLoading.value = false

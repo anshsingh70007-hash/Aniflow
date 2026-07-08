@@ -1,0 +1,13 @@
+-keep class com.example.aniflow.security.Stormbreaker { *; }
+-keep class com.example.aniflow.data.model.** { *; }
+-keep class com.example.aniflow.data.AniLightScheduleEntry { *; }
+-keep class com.example.aniflow.data.AniLightScheduleAnime { *; }
+-keep class com.example.aniflow.data.AniLightNextAiringEpisode { *; }
+-keep class io.ktor.** { *; }
+-dontwarn io.ktor.**
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.AnnotationsKt
+-keep,includedescriptorclasses class com.example.aniflow.**$$serializer { *; }
+-repackageclasses ''
+-allowaccessmodification
+-overloadaggressively

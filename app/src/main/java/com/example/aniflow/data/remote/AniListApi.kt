@@ -55,27 +55,40 @@ class AniListApi(private val client: HttpClient) {
     }
 
     private suspend fun queryAniListFromApi(query: String, variables: JsonObject): JsonObject? {
-        return try {
-            val response: HttpResponse = client.post("https://graphql.anilist.co") {
-                contentType(ContentType.Application.Json)
-                header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                setBody(buildJsonObject {
-                    put("query", query)
-                    put("variables", variables)
-                })
+        var lastException: Exception? = null
+        for (attempt in 1..3) {
+            try {
+                val response: HttpResponse = client.post("https://graphql.anilist.co") {
+                    contentType(ContentType.Application.Json)
+                    header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    setBody(buildJsonObject {
+                        put("query", query)
+                        put("variables", variables)
+                    })
+                }
+                android.util.Log.d("AniListApi", "Response status: ${response.status} (attempt $attempt)")
+                if (response.status == HttpStatusCode.OK) {
+                    val responseBody = response.bodyAsText()
+                    return json.parseToJsonElement(responseBody).jsonObject
+                } else if (response.status.value == 429) {
+                    // Rate limited — wait before retrying
+                    android.util.Log.w("AniListApi", "Rate limited (429), waiting before retry $attempt")
+                    kotlinx.coroutines.delay(attempt * 2000L)
+                    continue
+                } else {
+                    android.util.Log.e("AniListApi", "Failed with status: ${response.status}, body: ${response.bodyAsText()}")
+                    return null
+                }
+            } catch (e: Exception) {
+                lastException = e
+                android.util.Log.w("AniListApi", "Attempt $attempt failed", e)
+                if (attempt < 3) {
+                    kotlinx.coroutines.delay(attempt * 1500L)
+                }
             }
-            android.util.Log.d("AniListApi", "Response status: ${response.status}")
-            if (response.status == HttpStatusCode.OK) {
-                val responseBody = response.bodyAsText()
-                json.parseToJsonElement(responseBody).jsonObject
-            } else {
-                android.util.Log.e("AniListApi", "Failed with status: ${response.status}, body: ${response.bodyAsText()}")
-                null
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("AniListApi", "Exception in queryAniListFromApi", e)
-            null
         }
+        android.util.Log.e("AniListApi", "All 3 attempts failed for query", lastException)
+        return null
     }
 
     suspend fun getTrending(page: Int = 1, perPage: Int = 15): List<Anime> {

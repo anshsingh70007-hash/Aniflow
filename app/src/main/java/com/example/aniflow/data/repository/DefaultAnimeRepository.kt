@@ -23,6 +23,29 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
     private var lastScheduleFetchTime: Long = 0L
     private val SCHEDULE_CACHE_DURATION_MS = 5 * 60 * 1000L // 5 minutes
 
+    private var cachedTrending: List<Anime>? = null
+    private var lastTrendingFetchTime: Long = 0L
+
+    private var cachedPopular: List<Anime>? = null
+    private var lastPopularFetchTime: Long = 0L
+
+    private var cachedSeasonal: List<Anime>? = null
+    private var lastSeasonalFetchTime: Long = 0L
+
+    private var cachedTopRated: List<Anime>? = null
+    private var lastTopRatedFetchTime: Long = 0L
+
+    private var cachedUpcoming: List<Anime>? = null
+    private var lastUpcomingFetchTime: Long = 0L
+
+    private var cachedAction: List<Anime>? = null
+    private var lastActionFetchTime: Long = 0L
+
+    private var cachedRomance: List<Anime>? = null
+    private var lastRomanceFetchTime: Long = 0L
+
+    private val HOME_CACHE_DURATION_MS = 10 * 60 * 1000L // 10 minutes
+
     private suspend fun getCachedSchedule(): List<com.example.aniflow.data.AniLightScheduleEntry> {
         val now = System.currentTimeMillis()
         val cached = cachedSchedule
@@ -38,18 +61,69 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
     }
 
     override fun getTrending(): Flow<List<Anime>> = flow {
-        val list = aniListApi.getTrending()
-        emit(list.ifEmpty { getFallbackAnimeList() })
+        val now = System.currentTimeMillis()
+        val cached = cachedTrending
+        if (cached != null && cached.size > 3 && now - lastTrendingFetchTime < HOME_CACHE_DURATION_MS) {
+            emit(cached)
+            return@flow
+        }
+        try {
+            val list = aniListApi.getTrending()
+            if (list.isNotEmpty()) {
+                cachedTrending = list
+                lastTrendingFetchTime = now
+                emit(list)
+            } else {
+                emit(cached ?: getFallbackAnimeList())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DefaultAnimeRepository", "Error getting trending", e)
+            emit(cached ?: getFallbackAnimeList())
+        }
     }.flowOn(Dispatchers.IO)
 
     override fun getPopular(): Flow<List<Anime>> = flow {
-        val list = aniListApi.getPopular()
-        emit(list.ifEmpty { getFallbackAnimeList() })
+        val now = System.currentTimeMillis()
+        val cached = cachedPopular
+        if (cached != null && cached.size > 3 && now - lastPopularFetchTime < HOME_CACHE_DURATION_MS) {
+            emit(cached)
+            return@flow
+        }
+        try {
+            val list = aniListApi.getPopular()
+            if (list.isNotEmpty()) {
+                cachedPopular = list
+                lastPopularFetchTime = now
+                emit(list)
+            } else {
+                emit(cached ?: getFallbackAnimeList())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DefaultAnimeRepository", "Error getting popular", e)
+            emit(cached ?: getFallbackAnimeList())
+        }
     }.flowOn(Dispatchers.IO)
 
     override fun getSeasonal(): Flow<List<Anime>> = flow {
-        val list = aniListApi.getSeasonal()
-        emit(list.ifEmpty { getFallbackAnimeList() })
+        val now = System.currentTimeMillis()
+        val cached = cachedSeasonal
+        if (cached != null && cached.size > 3 && now - lastSeasonalFetchTime < HOME_CACHE_DURATION_MS) {
+            emit(cached)
+            return@flow
+        }
+        try {
+            val list = aniListApi.getSeasonal()
+            if (list.isNotEmpty()) {
+                cachedSeasonal = list
+                lastSeasonalFetchTime = now
+                emit(list)
+            } else {
+                emit(cached ?: getFallbackAnimeList())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DefaultAnimeRepository", "Error getting seasonal", e)
+            emit(cached ?: getFallbackAnimeList())
+        }
     }.flowOn(Dispatchers.IO)
 
     override fun getAiringToday(): Flow<List<AiringAnime>> = flow {
@@ -58,13 +132,47 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
     }.flowOn(Dispatchers.IO)
 
     override fun getTopRated(): Flow<List<Anime>> = flow {
-        val list = aniListApi.getTopRated()
-        emit(list.ifEmpty { getFallbackAnimeList() })
+        val now = System.currentTimeMillis()
+        val cached = cachedTopRated
+        if (cached != null && cached.size > 3 && now - lastTopRatedFetchTime < HOME_CACHE_DURATION_MS) {
+            emit(cached)
+            return@flow
+        }
+        try {
+            val list = aniListApi.getTopRated()
+            if (list.isNotEmpty()) {
+                cachedTopRated = list
+                lastTopRatedFetchTime = now
+                emit(list)
+            } else {
+                emit(cached ?: getFallbackAnimeList())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DefaultAnimeRepository", "Error getting top rated", e)
+            emit(cached ?: getFallbackAnimeList())
+        }
     }.flowOn(Dispatchers.IO)
 
     override fun getUpcoming(): Flow<List<Anime>> = flow {
-        val list = aniListApi.getUpcoming()
-        emit(list.ifEmpty { getFallbackAnimeList() })
+        val now = System.currentTimeMillis()
+        val cached = cachedUpcoming
+        if (cached != null && cached.size > 3 && now - lastUpcomingFetchTime < HOME_CACHE_DURATION_MS) {
+            emit(cached)
+            return@flow
+        }
+        try {
+            val list = aniListApi.getUpcoming()
+            if (list.isNotEmpty()) {
+                cachedUpcoming = list
+                lastUpcomingFetchTime = now
+                emit(list)
+            } else {
+                emit(cached ?: getFallbackAnimeList())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DefaultAnimeRepository", "Error getting upcoming", e)
+            emit(cached ?: getFallbackAnimeList())
+        }
     }.flowOn(Dispatchers.IO)
 
     override fun getRecentlyUpdated(): Flow<List<Anime>> = flow {
@@ -73,13 +181,47 @@ class DefaultAnimeRepository(private val context: Context) : AnimeRepository {
     }.flowOn(Dispatchers.IO)
 
     override fun getActionAnime(): Flow<List<Anime>> = flow {
-        val list = aniListApi.getAnimeByGenre("Action")
-        emit(list.ifEmpty { getFallbackAnimeList() })
+        val now = System.currentTimeMillis()
+        val cached = cachedAction
+        if (cached != null && cached.size > 3 && now - lastActionFetchTime < HOME_CACHE_DURATION_MS) {
+            emit(cached)
+            return@flow
+        }
+        try {
+            val list = aniListApi.getAnimeByGenre("Action")
+            if (list.isNotEmpty()) {
+                cachedAction = list
+                lastActionFetchTime = now
+                emit(list)
+            } else {
+                emit(cached ?: getFallbackAnimeList())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DefaultAnimeRepository", "Error getting action anime", e)
+            emit(cached ?: getFallbackAnimeList())
+        }
     }.flowOn(Dispatchers.IO)
 
     override fun getRomanceAnime(): Flow<List<Anime>> = flow {
-        val list = aniListApi.getAnimeByGenre("Romance")
-        emit(list.ifEmpty { getFallbackAnimeList() })
+        val now = System.currentTimeMillis()
+        val cached = cachedRomance
+        if (cached != null && cached.size > 3 && now - lastRomanceFetchTime < HOME_CACHE_DURATION_MS) {
+            emit(cached)
+            return@flow
+        }
+        try {
+            val list = aniListApi.getAnimeByGenre("Romance")
+            if (list.isNotEmpty()) {
+                cachedRomance = list
+                lastRomanceFetchTime = now
+                emit(list)
+            } else {
+                emit(cached ?: getFallbackAnimeList())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DefaultAnimeRepository", "Error getting romance anime", e)
+            emit(cached ?: getFallbackAnimeList())
+        }
     }.flowOn(Dispatchers.IO)
 
     override fun getAnimeByGenre(genre: String): Flow<List<Anime>> = flow {
