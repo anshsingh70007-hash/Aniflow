@@ -75,8 +75,8 @@ fun MainScreen(
     val sStore = remember { settingsStore ?: SettingsStore(context) }
 
     if (updateInfo != null) {
-        UpdateTakeoverScreen(info = updateInfo!!) {
-            com.example.aniflow.utils.AppUpdater.downloadAndInstall(context, updateInfo!!.updateUrl, updateInfo!!.versionName)
+        UpdateTakeoverScreen(info = updateInfo!!) { onProgress ->
+            com.example.aniflow.utils.AppUpdater.downloadAndInstall(context, updateInfo!!.updateUrl, updateInfo!!.versionName, onProgress)
         }
         return
     }
@@ -266,8 +266,10 @@ fun MainScreen(
 @Composable
 fun UpdateTakeoverScreen(
     info: com.example.aniflow.data.model.AppUpdateInfo,
-    onDownload: () -> Unit
+    onDownload: ((Float) -> Unit) -> Unit
 ) {
+    var downloadProgress by remember { mutableStateOf(-2.0f) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -351,18 +353,48 @@ fun UpdateTakeoverScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                Button(
-                    onClick = onDownload,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent),
-                    contentPadding = PaddingValues(vertical = 12.dp)
-                ) {
+                if (downloadProgress >= 0.0f) {
                     Text(
-                        text = "Download Now",
+                        text = "Downloading Update: ${(downloadProgress * 100).toInt()}%",
                         color = TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = downloadProgress,
+                        color = PrimaryAccent,
+                        trackColor = PrimaryDark.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    if (downloadProgress == -1.0f) {
+                        Text(
+                            text = "Download failed. Please try again.",
+                            color = androidx.compose.ui.graphics.Color.Red,
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    Button(
+                        onClick = {
+                            downloadProgress = 0.0f
+                            onDownload { progress ->
+                                downloadProgress = progress
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        Text(
+                            text = if (downloadProgress == -1.0f) "Retry Download" else "Download Now",
+                            color = TextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

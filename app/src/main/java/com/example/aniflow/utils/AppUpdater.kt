@@ -1,75 +1,110 @@
 package com.example.aniflow.utils
 
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object AppUpdater {
-    fun downloadAndInstall(context: Context, url: String, versionName: String) {
-        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    fun downloadAndInstall(
+        context: Context,
+        url: String,
+        versionName: String,
+        onProgress: ((Float) -> Unit)? = null
+    ) {
         val destinationFile = File(
             context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
             "AniFinal_$versionName.apk"
         )
-        
-        // Delete existing file if present
-        if (destinationFile.exists()) {
-            destinationFile.delete()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            var success = false
+            try {
+                // Delete existing file if present
+                if (destinationFile.exists()) {
+                    destinationFile.delete()
+                }
+                
+                val connection = URL(url).openConnection() as HttpURLConnection
+                connection.connectTimeout = 30_000
+                connection.readTimeout = 30_000
+                connection.connect()
+
+                val responseCode = connection.responseCode
+                if (responseCode == HttpURLConnection.HTTP_MOVED_TEMP || 
+                    responseCode == HttpURLConnection.HTTP_MOVED_PERM ||
+                    responseCode == 307 || responseCode == 308) {
+                    val newUrl = connection.getHeaderField("Location")
+                    val newConn = URL(newUrl).openConnection() as HttpURLConnection
+                    newConn.connectTimeout = 30_000
+                    newConn.readTimeout = 30_000
+                    newConn.connect()
+                    
+                    if (newConn.responseCode != HttpURLConnection.HTTP_OK) {
+                        throw Exception("HTTP Error: ${newConn.responseCode}")
+                    }
+                    downloadFileStream(newConn, destinationFile, onProgress)
+                } else {
+                    if (responseCode != HttpURLConnection.HTTP_OK) {
+                        throw Exception("HTTP Error: $responseCode")
+                    }
+                    downloadFileStream(connection, destinationFile, onProgress)
+                }
+                
+                success = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    onProgress?.invoke(-1.0f)
+                    Toast.makeText(context, "Download failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                }
+            }
+
+            if (success && destinationFile.exists() && destinationFile.length() > 0) {
+                withContext(Dispatchers.Main) {
+                    onProgress?.invoke(1.0f)
+                    installApk(context, destinationFile)
+                }
+            }
         }
+    }
 
-        try {
-            val request = DownloadManager.Request(Uri.parse(url))
-                .setTitle("Downloading AniFlow Update")
-                .setDescription("Version $versionName")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "AniFinal_$versionName.apk")
-
-            val downloadId = downloadManager.enqueue(request)
-            Toast.makeText(context, "Download started in background...", Toast.LENGTH_SHORT).show()
-
-            // Register broadcast receiver to handle download completion and install
-            val onComplete = object : BroadcastReceiver() {
-                override fun onReceive(ctx: Context, intent: Intent) {
-                    val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-                    if (id == downloadId) {
-                        try {
-                            ctx.unregisterReceiver(this)
-                        } catch (e: Exception) {
-                            // ignore
+    private suspend fun downloadFileStream(
+        connection: HttpURLConnection,
+        destinationFile: File,
+        onProgress: ((Float) -> Unit)?
+    ) = withContext(Dispatchers.IO) {
+        val totalBytes = connection.contentLength
+        connection.inputStream.use { input ->
+            FileOutputStream(destinationFile).use { output ->
+                val buffer = ByteArray(16384) // 16KB buffer for fast downloading
+                var bytesRead: Int
+                var downloadedBytes = 0L
+                var lastUpdate = 0L
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    downloadedBytes += bytesRead
+                    
+                    val now = System.currentTimeMillis()
+                    if (totalBytes > 0 && now - lastUpdate > 100) { // Throttle progress updates to UI to avoid spamming Main thread
+                        lastUpdate = now
+                        val progress = downloadedBytes.toFloat() / totalBytes
+                        withContext(Dispatchers.Main) {
+                            onProgress?.invoke(progress)
                         }
-                        installApk(ctx, destinationFile)
                     }
                 }
-            }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(
-                    onComplete,
-                    IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-                    Context.RECEIVER_EXPORTED
-                )
-            } else {
-                context.registerReceiver(
-                    onComplete,
-                    IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-                )
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(context, "Failed to start download. Opening in browser instead...", Toast.LENGTH_LONG).show()
-            try {
-                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                context.startActivity(browserIntent)
-            } catch (ex: Exception) {
-                Toast.makeText(context, "No app available to open link.", Toast.LENGTH_LONG).show()
+                output.flush()
             }
         }
     }
