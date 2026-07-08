@@ -11,13 +11,15 @@ android {
         applicationId = "com.example.aniflow"
         minSdk = 24
         targetSdk = 36
-        versionCode = 27
-        versionName = "1.7.10"
+        versionCode = 28
+        versionName = "1.7.11"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

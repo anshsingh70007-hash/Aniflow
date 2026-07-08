@@ -1,8 +1,8 @@
 {
-  "versionCode": 27,
-  "versionName": "1.7.10",
-  "updateUrl": "https://raw.githubusercontent.com/anshsingh70007-hash/Aniflow/main/releases/AniFinal_1.7.10.apk",
-  "updateNotes": "Fix sorting of Airing Today and Recently Released lists; clean up and optimize ExoPlayer video redirect resolution; implement 15-minute auto-refresh.",
+  "versionCode": 28,
+  "versionName": "1.7.11",
+  "updateUrl": "https://raw.githubusercontent.com/anshsingh70007-hash/Aniflow/main/releases/AniFinal_1.7.11.apk",
+  "updateNotes": "Security updates, video player fixes, and homepage fixes.",
   "forceUpdate": false,
   "silentUpdate": false
 }

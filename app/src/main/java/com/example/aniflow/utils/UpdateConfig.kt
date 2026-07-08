@@ -1,5 +1,7 @@
 package com.example.aniflow.utils
 
+import com.example.aniflow.security.Stormbreaker
+
 object UpdateConfig {
-    const val UPDATE_JSON_URL = "https://raw.githubusercontent.com/anshsingh70007-hash/Aniflow/main/app_update.json"
+    val UPDATE_JSON_URL: String get() = Stormbreaker.getUpdateUrl()
 }
