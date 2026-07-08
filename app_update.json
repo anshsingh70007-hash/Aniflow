@@ -1,8 +1,8 @@
 {
-  "versionCode": 29,
-  "versionName": "1.7.12",
-  "updateUrl": "https://raw.githubusercontent.com/anshsingh70007-hash/Aniflow/main/releases/AniFinal_1.7.12.apk",
-  "updateNotes": "Minor update test: verifying force update screen layout works on TV.",
+  "versionCode": 30,
+  "versionName": "1.7.13",
+  "updateUrl": "https://raw.githubusercontent.com/anshsingh70007-hash/Aniflow/main/releases/AniFinal_1.7.13.apk",
+  "updateNotes": "Update release 1.7.13 featuring redesigned glassmorphic user interface.",
   "forceUpdate": false,
   "silentUpdate": false
 }

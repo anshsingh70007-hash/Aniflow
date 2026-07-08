@@ -11,8 +11,20 @@ android {
         applicationId = "com.example.aniflow"
         minSdk = 24
         targetSdk = 36
-        versionCode = 29
-        versionName = "1.7.12"
+        versionCode = 30
+        versionName = "1.7.13"
+    }
+
+    flavorDimensions += "ui"
+    productFlavors {
+        create("standard") {
+            dimension = "ui"
+        }
+        create("redesign") {
+            dimension = "ui"
+            applicationIdSuffix = ".redesign"
+            versionNameSuffix = "-redesign"
+        }
     }
 
     buildTypes {
@@ -109,4 +121,12 @@ dependencies {
   // Serialization
   implementation(libs.serialization.json)
   implementation(libs.androidx.datastore.preferences)
+
+  // Redesign UI Libraries
+  implementation(libs.haze)
+  implementation(libs.haze.materials)
+  implementation(libs.lottie.compose)
+  implementation(libs.orbital)
+  implementation(libs.konfetti.compose)
+  implementation(libs.androidx.palette)
 }
