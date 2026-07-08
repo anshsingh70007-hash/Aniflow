@@ -1,7 +1,7 @@
 {
-  "versionCode": 32,
-  "versionName": "1.7.15",
-  "updateUrl": "https://raw.githubusercontent.com/anshsingh70007-hash/Aniflow/main/releases/AniFinal_1.7.15.apk",
+  "versionCode": 31,
+  "versionName": "1.7.14",
+  "updateUrl": "https://raw.githubusercontent.com/anshsingh70007-hash/Aniflow/main/releases/AniFinal_1.7.14.apk",
   "updateNotes": "TV homepage loading and scheduler fixes for redesigned UI.",
   "forceUpdate": false,
   "silentUpdate": false
