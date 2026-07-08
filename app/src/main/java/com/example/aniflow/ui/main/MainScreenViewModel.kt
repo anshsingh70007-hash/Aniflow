@@ -17,6 +17,8 @@ class MainScreenViewModel(
     private val context: android.content.Context
 ) : ViewModel() {
 
+    private val settingsStore = SettingsStore(context)
+
     private val _currentTab = MutableStateFlow(0)
     val currentTab = _currentTab.asStateFlow()
 
@@ -90,7 +92,6 @@ class MainScreenViewModel(
         }
     }
 
-    private val settingsStore = SettingsStore(context)
 
     fun dismissUpdate() {
         _updateInfo.value = null
@@ -98,11 +99,29 @@ class MainScreenViewModel(
 
     private fun checkForUpdates() {
         viewModelScope.launch {
-            try {
-                val autoCheckEnabled = settingsStore.checkUpdatesStartup.first()
-                if (!autoCheckEnabled) return@launch
+            val autoCheckEnabled = settingsStore.checkUpdatesStartup.first()
+            if (!autoCheckEnabled) return@launch
 
-                val info = repository.checkUpdates()
+            // Wait for network connection to establish
+            kotlinx.coroutines.delay(3000L)
+
+            var retries = 5
+            var info: AppUpdateInfo? = null
+            while (retries > 0 && info == null) {
+                try {
+                    info = repository.checkUpdates()
+                } catch (e: Exception) {
+                    android.util.Log.w("MainScreenViewModel", "Update check failed, retries remaining: $retries", e)
+                }
+                if (info == null) {
+                    retries--
+                    if (retries > 0) {
+                        kotlinx.coroutines.delay(5000L)
+                    }
+                }
+            }
+
+            if (info != null) {
                 val currentVersionCode = try {
                     val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -114,12 +133,12 @@ class MainScreenViewModel(
                 } catch (e: Exception) {
                     1
                 }
-                android.util.Log.d("MainScreenViewModel", "checkForUpdates: info=$info, current=$currentVersionCode")
-                if (info != null && info.versionCode > currentVersionCode && !info.silentUpdate) {
+                android.util.Log.d("MainScreenViewModel", "checkForUpdates final: info=$info, current=$currentVersionCode")
+                if (info.versionCode > currentVersionCode && !info.silentUpdate) {
                     _updateInfo.value = info
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("MainScreenViewModel", "Error checking updates", e)
+            } else {
+                android.util.Log.e("MainScreenViewModel", "Update check failed after all retries")
             }
         }
     }

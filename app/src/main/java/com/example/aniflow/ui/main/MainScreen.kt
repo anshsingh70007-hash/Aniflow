@@ -74,47 +74,11 @@ fun MainScreen(
     val hStore = remember { watchHistoryStore ?: WatchHistoryStore(context) }
     val sStore = remember { settingsStore ?: SettingsStore(context) }
 
-    updateInfo?.let { info ->
-        AlertDialog(
-            onDismissRequest = { 
-                if (!info.forceUpdate) {
-                    viewModel.dismissUpdate()
-                }
-            },
-            title = { Text("App Update Available", color = TextPrimary, fontWeight = FontWeight.Bold) },
-            text = { 
-                Column {
-                    Text("Version ${info.versionName} is now available.", color = TextSecondary)
-                    info.updateNotes?.let { notes ->
-                        Spacer(Modifier.height(8.dp))
-                        Text("Changelog: $notes", color = TextSecondary, fontSize = 12.sp)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { 
-                        com.example.aniflow.utils.AppUpdater.downloadAndInstall(context, info.updateUrl, info.versionName)
-                        if (!info.forceUpdate) {
-                            viewModel.dismissUpdate()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent)
-                ) {
-                    Text("Download Update", color = TextPrimary)
-                }
-            },
-            dismissButton = {
-                if (!info.forceUpdate) {
-                    TextButton(onClick = { viewModel.dismissUpdate() }) {
-                        Text("Later", color = TextSecondary)
-                    }
-                }
-            },
-            containerColor = SurfaceCard,
-            textContentColor = TextSecondary,
-            titleContentColor = TextPrimary
-        )
+    if (updateInfo != null) {
+        UpdateTakeoverScreen(info = updateInfo!!) {
+            com.example.aniflow.utils.AppUpdater.downloadAndInstall(context, updateInfo!!.updateUrl, updateInfo!!.versionName)
+        }
+        return
     }
 
     if (deviceType == DeviceType.TV) {
@@ -297,3 +261,111 @@ fun MainScreen(
         }
     }
 }
+
+
+@Composable
+fun UpdateTakeoverScreen(
+    info: com.example.aniflow.data.model.AppUpdateInfo,
+    onDownload: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(PrimaryDark.copy(alpha = 0.95f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+            modifier = Modifier
+                .width(420.dp)
+                .padding(24.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header Icon / Banner
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .background(PrimaryAccent.copy(alpha = 0.15f), shape = androidx.compose.foundation.shape.CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = PrimaryAccent
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "Update Available",
+                    color = TextPrimary,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "A new version of AniFlow (v${info.versionName}) is available. Please update to continue using the application.",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+
+                if (!info.updateNotes.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = PrimaryDark.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = "What's New:",
+                                color = PrimaryAccentLight,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = info.updateNotes,
+                                color = TextSecondary,
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Button(
+                    onClick = onDownload,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    Text(
+                        text = "Download Now",
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
